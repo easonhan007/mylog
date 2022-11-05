@@ -1,0 +1,8 @@
+<article class="container mx-auto m-10">
+  <% unless @tags.blank? %>
+    <%= render partial: 'shared/inline_tags', locals: {tags: @tags} %>
+  <% end %>
+  <div class="prose prose-lg md:max-w-none px-2">
+    <%= raw to_html(@md_content) %>
+  </div>
+</article>

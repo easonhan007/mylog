@@ -1,0 +1,7 @@
+<div class="flex flex-row justify-start gap-4 pb-4">
+  <% tags.each do |tag| %>
+  <div>
+    <%= link_to(tag, tag_path(tag), class: "text-blue-700 font-bold")%>
+  </div>
+  <% end %>
+</div>

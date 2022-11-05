@@ -1,0 +1,16 @@
+# config/payment.yml
+production:
+  host: production_merchant_id
+  port: production_merchant_id
+  post_set_key: live_posts
+  post_prefix: live_p
+  tag_prefix: live_t_
+  tag_set_key: live_tags
+
+development:
+  host: localhost
+  port: 6379
+  post_set_key: dev_posts
+  post_prefix: dev_p_
+  tag_prefix: dev_t_
+  tag_set_key: dev_tags
