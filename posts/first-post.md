@@ -1,188 +1,295 @@
-{"title": "python requests的替代者？httpx初体验", "created": "2022-10-17", "tags": ["python", "request"]}
+{"title": "How to create a blog without database — part1", "created": "2022-11-13", "tags": ["ruby", "ror", "redis"]}
 
-# python requests的替代者？httpx初体验
+# How to create a blog without database — part1
 
-python的requests库由于其使用简单，文档丰富成为了很多人在发送http请求时候的优选选择。前几天看到了一个类似的实现httpx，在这里简单使用体验一下，顺便简单分享一下体验心得。
+It’s been a while since the latest rails version released, I am a little bit curious about what’s the experience of building a tiny  blog using rails 7 in the late 2022.
 
-相比较requests，httpx支持sync和async的API，支持http1.1和http2。httpx尽最大努力兼容requests的API，这样一来用户从requests转换到httpx的成本就相对较为低廉了。
+## The tech stack
 
-### 基本API
+I am going to use rails 7 + redis + tailwind css to implement the  system. Since I will deploy it in a very low end virtual machine, I try to make everything as simple as possible. I’d like to write the post via markdown language and save it to a plain text file, in that case data persistence is optional. I still need to store the post list information, such as the post title, published date and post tags. The idea way of saving these information is using a traditional relational database, for sample mysql or postgres, remind you that I’ve confirmed that avoiding using a database, I decided to use redis instead. So here is the design, every time I create a new post, I commit the file to git repository , run a deploy script which will makes the repository in vm updated， in the end I will run a rake task that pareses post information and store the data to redis. I will not add an expire time when save something to redis, in that way we can treat the cache as a straightforward mini database. 
 
-```python
->>> import httpx
->>> r = httpx.get('https://www.example.org/')
->>> r
-<Response [200 OK]>
->>> r.status_code
-200
->>> r.headers['content-type']
-'text/html; charset=UTF-8'
->>> r.text
-'<!doctype html>\n<html>\n<head>\n<title>Example Domain</title>...'
-```
+- Ruby on Rails: the primary web framework
+- Redis: temporary storage
+- Tailwind css: css framework
 
-简单扫一圈，满眼都是requests当年的样子。下面是requests的API，大家来找茬，看看哪里不一样。
+## Design
 
-```python
->>> import requests
->>> r = requests.get('https://api.github.com/user', auth=('user', 'pass'))
->> r.status_code
-200
->> r.headers['content-type']
-'application/json; charset=utf8'
->> r.encoding
-'utf-8'
->> r.text
-'{"type":"User"...'
->> r.json()
-{'private_gists': 419, 'total_private_repos': 77, ...}
-```
+I divide the entire progress into 2 phases, they are parse phase and render phase.
 
-不能说非常相似，只能说是一模一样。
+- parse phase: parse the markdown files, get the meta data of the post, store the data to redis
+- render phase: when users view post list and post detail, read the data from redis, if the cache expires, read the data from md file directly
 
-### httpx client
-
-requests为一组http请求提供了session对象来进行统一设置和管理，httpx则相应的提供了client对象。我们来对比一下使用方式先。
-
-首先使用starlette来创建一个简单的python api服务。starlette项目可以想象成是async版本的flask，跟httpx系出同门。
-
-```python
-# example.py
-from starlette.applications import Starlette
-from starlette.responses import JSONResponse
-from starlette.routing import Route
-
-async def homepage(request):
-    await asyncio.sleep(0.1) # 加一点点等待，不加也可以
-    return JSONResponse({'hello': 'world'})
-
-routes = [
-    Route("/", endpoint=homepage)
-]
-
-# app = Starlette(debug=True, routes=routes)
-app = Starlette(debug=False, routes=routes)
-```
-
-使用uvicorn运行。
+A typical post file looks like this
 
 ```bash
-$ uvicorn example:app
+{"title": "How to create a post", "created": "2022-10-17", "tags": ["python", "request"]}
+
+# How to create a post
+
+This is the content of the post.
+
 ```
 
-上面的服务提供了1个接口localhost:8000，返回值如下
+The first line is a straightforward json string. Several fielders are mandatory.
+
+- title: post title
+- created: post created date
+
+Tags field is optional.A tag is kind of a category, it aggregates similar posts.
+
+## Routes
+
+We only need to concern 2 pages.
+
+- Post list: display all the posts order by updated time from newer to older
+- Post detail: the content of the post
+
+## Create the project
+
+At this moment, the latest rails version is 7.0.4, ideally we’d better use the latest ruby version, however ruby 3.1.x is sufficient , so I will stick to ruby 3.1.1.
 
 ```bash
-http :8000
-
-HTTP/1.1 200 OK
-content-length: 17
-content-type: application/json
-date: Thu, 11 Aug 2022 07:10:07 GMT
-server: uvicorn
-
-{
-    "hello": "world"
-}
+# install rails 7.0.4
+gem install rails -v 7.0.4
 ```
 
-我们先用非client/session方式来访问该接口30次，顺便统计一下运行时间
-
-requests先出场。
-
-```python
-# without_session
-import requests
-
-for i in range(0,30):
-	res = requests.get('http://localhost:8000/').json()
-	print(res)
-```
+Create new project using rails command and indicate tailwindcss as the default css framework.
 
 ```bash
-python without_session.py  0.24s user 0.08s system 9% cpu 3.500 total
+rails new mylog --css tailwind
 ```
 
-上面是不用session的方式，3.5s完成。
+Despite we are not going to use the database, rails project still need to init it.
 
-使用session试试。
+```bash
+cd mylog
 
-```python
-import requests
-
-s = requests.Session()
-
-for i in range(0,30):
-	res = s.get('http://localhost:8000/').json()
-	print(res)
+rails db:create
 ```
 
-```python
-python with_session.py  0.22s user 0.08s system 8% cpu 3.443 total
+Run rails server.
+
+```bash
+
+bin/dev
 ```
 
-3.44s，快了一点点。
+Now open the browser and go to localhost:3000, you can see the default rails welcome page.
 
-下面是httpx不使用client的方式。
+## Create a redis config file
 
-```python
-python without_client.py  0.69s user 0.11s system 20% cpu 3.972 total
+As I use redis as the primary storage and rails does not have a redis configuration file by default, it is time to create a redis config file manually.
+
+```bash
+touch config/redis.yml
 ```
 
-3.9s。
+Set some basic config, for example host and port.
 
-使用client试试
-
-```python
-import httpx
-
-with httpx.Client() as client:
-	for i in range(0, 30):
-		res = client.get('http://localhost:8000/').json()
-		print(res)
+```yaml
+# config/redis.yml
+production:
+  host: localhost
+  port: 6379
+  
+development:
+  host: localhost
+  port: 6379
+  
 ```
 
-```python
-python with_client.py  0.38s user 0.11s system 13% cpu 3.707 total
+## Create a rake task to parse markdown file
+
+Parsing the markdown file is the significant and a little bit complicate, let’s design the primary data structure first.
+
+**post list set**
+
+A redis zset contains all the posts information, the score is the post updated date, value is a json string looks like the following
+
+```json
+1) "{\"title\":\"python requests\xe7\x9a\x84\xe6\x9b\xbf\xe4\xbb\xa3\xe8\x80\x85\xef\xbc\x9fhttpx\xe5\x88\x9d\xe4\xbd\x93\xe9\xaa\x8c\",\"created\":\"2022-10-17\",\"tags\":[\"python\",\"request\"],\"file_name\":\"first-post\"}"
+2) "{\"title\":\"\xe7\xae\x97\xe6\xb3\x95\xe9\xa2\x98\",\"created\":\"2022-10-27\",\"tags\":[\"alg\",\"python\",\"string\"],\"file_name\":\"second-post\"}"
 ```
 
-3.7s，也快了一些。
+This data structure contains everything I need to display in the post list page which is also my homepage.
 
-这里可以简单总结一下，使用client/session可以提升一组请求的发送效率，另外也提供了进行统一配置（比如修改header的）的快捷方式。上面的测试由于请求处理的太快效果不是很明显，在日常的测试中两种方式的区别可能会更加容易发现一些。
+**tag list set**
 
-### async
+I’d like to create a redis set to store all the tags since I have a fancy tag list in the homepage. Set is the ideally data structure because it guarantees that no duplicated items exist.
 
-还是30个请求，这次我们用httpx的async方式来试试。
-
-```python
-import asyncio
-from asyncio import tasks
-import httpx
-
-async def send_requests(client):
-	r = await client.get('http://localhost:8000')
-	print(r.json())
-	return r.json()
-		
-
-async def main():
-	tasks = []	
-	async with httpx.AsyncClient() as client:
-		for i in range(0, 30):
-			tasks.append(send_requests(client))
-
-		await asyncio.gather(*tasks)
-			
-
-asyncio.run(main())
+```jsx
+127.0.0.1:6379> smembers dev_tags
+1) "alg"
+2) "string"
+3) "request"
+4) "python"
 ```
 
-```python
-python httpx_async.py  0.47s user 0.13s system 71% cpu 0.848 total
+individual **tag  set**
+
+As I have a tag list displays in the homepage consequently end users are able to click the tag link and I’d like to navigate to a tag page which aggregates all the posts that belong to the certain tag.
+
+That is to say I have to store all the posts with the same tag attached to them. This can be achieved by using some redis sets, the key of which contains a prefix and the tag name, the value is a json string which is a serialization of post’s basic data such as title and markdown file name.
+
+It looks just like this
+
+```jsx
+smembers dev_t_python
+1) "{\"title\":\"python requests\xe7\x9a\x84\xe6\x9b\xbf\xe4\xbb\xa3\xe8\x80\x85\xef\xbc\x9fhttpx\xe5\x88\x9d\xe4\xbd\x93\xe9\xaa\x8c\",\"created\":\"2022-10-17\",\"tags\":[\"python\",\"request\"],\"file_name\":\"first-post\"}"
+2) "{\"title\":\"\xe7\xae\x97\xe6\xb3\x95\xe9\xa2\x98\",\"created\":\"2022-10-27\",\"tags\":[\"alg\",\"python\",\"string\"],\"file_name\":\"second-post\"}"
 ```
 
-0.84秒，这大概就是httpx的最终奥义吧。
+In the example, `dev_t_`is the prefix, python is the tag name. There are two items in the set, each of them is a json string that includes post’d meta data.
 
-### 总结
+**post detail string** 
 
-作为下一代的http client，httpx出自名门望族(其开发团队开发了**[django-rest-framework](https://github.com/encode/django-rest-framework)**)，兼容了部分的requests api，支持async操作等，是具有取代requests的能力的，在爬虫场景非常有潜力。
+In the end we have to save the post content which will fulfill the post detail page to redis. This is straightforward, we can combine a prefix with the post’s filename to generate a unique key and store the markdown text to redis.
+
+### create a brand new rake task
+
+Type the following commands in terminal.
+
+```bash
+rails g task scan
+mkdir -p posts 
+touch posts/first_post.md
+touch posts/second_post.md
+```
+
+Open scan.rake file that locates in lib/task directory, below is the complete code.
+
+```ruby
+namespace :scan do
+
+	desc 'parse file'
+  task :parse => :environment do
+		r = Redis.new(host: Rails.configuration.redis['host'], port: Rails.configuration.redis['port'])
+		key = Rails.configuration.redis['post_set_key']
+    set_key = Rails.configuration.redis['tag_set_key']
+    r.del(key)
+    r.del(set_key)
+    clear_all_tags(r)
+
+		Dir[File.join(Rails.root, "posts", '*.md')].each do |file|
+			file_name = file.split(File::SEPARATOR)[-1].sub('.md', '')
+      md_content = []
+      meta = {}
+      File.readlines(file).each_with_index do |line, index|
+        if index == 0
+          meta = parse_meta(line)
+          next if meta.blank? 
+        else
+          md_content.push line 
+        end #if
+      end
+      unless meta.blank?
+        puts "procssing #{file_name}"
+        meta['file_name'] = file_name
+        save_content_to_redis(r, file_name, md_content.join(), meta['tags'])
+        parse_tags_and_save_to_redis(r, meta)
+        r.zadd(key, File.mtime(file).to_datetime.to_i, JSON.dump(meta))
+      end #unless
+    end #each
+  end #task
+
+  def parse_meta(meta_str)
+    required_fields = %w{title created}
+
+    res = JSON.load(meta_str) rescue false
+    if res 
+      required_fields.each do |field|      
+        if not res.key?(field)
+          return {} 
+        end #if
+      end #each
+    else
+      return {}
+    end #if 
+    res
+  end
+
+  def parse_tags_and_save_to_redis(r, meta)
+    puts "Parsing tags"
+    set_key = Rails.configuration.redis['tag_set_key']
+    meta['tags'].each do |tag|
+      tag.strip!
+      key = "#{Rails.configuration.redis['tag_prefix']}#{tag}"
+      content = JSON.dump(meta)
+      r.sadd?(key, content)
+      puts("add tag #{tag} to redis")
+      r.sadd?(set_key, tag)
+    end #each
+  end 
+
+  def save_content_to_redis(r, file_name, content, tags)
+    puts "add #{file_name}'s content to redis"
+    key_prefix = Rails.configuration.redis['post_prefix']
+    key = key_prefix + file_name
+    r.set(key, JSON.dump({content: content, tags: tags})) 
+  end
+
+  def clear_all_tags(r)
+    puts "Delete all the tags"
+    pattern = "#{Rails.configuration.redis['tag_prefix']}*"
+    r.keys(pattern).each do |key|
+      puts "delete #{key}"
+      r.del(key)
+    end
+  end
+
+end
+```
+
+In a nut shell, the whole progress is 
+
+- Delete the post  list set
+- Clear the tag list set
+- Delete all the individual  tag sets
+- Scan all the files in the posts directory, if the file is a markdown file, then parse it
+- Treat the first line as a json string, serialize it to a python dictionary, this is the meta info of the markdown file
+- Save the rest of the file as the content of the post to redis, use the file name as partial of the key
+- Generate the post list set
+- Build the tag list set
+
+### Test the paring result
+
+Since I do not want to hard code all the redis keys in code, I simply put them in the redis config file.
+
+```yaml
+# config/redis.yml
+production:
+  host: todo
+  port: todo
+  post_set_key: live_posts
+  post_prefix: live_p
+  tag_prefix: live_t_
+  tag_set_key: live_tags
+
+development:
+  host: localhost
+  port: 6379
+  post_set_key: dev_posts
+  post_prefix: dev_p_
+  tag_prefix: dev_t_
+  tag_set_key: dev_tags
+```
+
+It’s easy to test the paring result via redis cli
+
+```bash
+redis-cli
+# get all the items in post list set
+zrange  dev_posts  0 -1
+# display all the tags
+SMEMBERS dev_tags
+# show all the individual tag keys
+keys dev_t_*
+# get the content of an individual tag set, in this case the tag name is string
+smembers dev_t_string
+# get a content of a post, the file name of the post is first-post.md 
+get dev_p_first-post
+```
+
+## Conclusion
+
+I have finished the most significant part of the blog system, I would like to say that most of the work is already done. I can image your dismay because it seems that we have not started yet. We did not even create a rails controller. I understand, remind you the upcoming part is in the comfort zone of rails, it is kind of no brainer. In the next post let’s try to finish the typical stuff of a rails project.

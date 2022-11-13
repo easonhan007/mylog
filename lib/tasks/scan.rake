@@ -1,14 +1,5 @@
 namespace :scan do
 
-	desc 'fake data and tese pagination'
-  task :mock => :environment do
-		r = Redis.new(host: Rails.configuration.redis['host'], port: Rails.configuration.redis['port'])
-		key = "mock_posts"
-		1.upto(119).each do |i|
-			r.zadd(key, 1000 + i, "post-#{i}")
-		end #each
-	end
-
 	desc 'parse file'
   task :parse => :environment do
 		r = Redis.new(host: Rails.configuration.redis['host'], port: Rails.configuration.redis['port'])
