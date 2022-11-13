@@ -5,6 +5,7 @@ Rails.application.configure do
 
   # Code is not reloaded between requests.
   config.cache_classes = true
+  config.secret_key_base = 'f3b3d54b77561e5b168bfe1f07d2d9bed5ba2a93468b4beb26c0f1719cd104f5a9757894e49602ffd36d6db60c5b543d313db05a90a63f5aa57d285be2e5c88c'
 
   # Eager load code on boot. This eager loads most of Rails and
   # your application in memory, allowing both threaded web servers
@@ -25,9 +26,9 @@ Rails.application.configure do
   config.public_file_server.enabled = ENV["RAILS_SERVE_STATIC_FILES"].present?
 
   # Compress CSS using a preprocessor.
-  # config.assets.css_compressor = :sass
+  config.assets.css_compressor = nil
 
-  # Do not fallback to assets pipeline if a precompiled asset is missed.
+  # Do not fallback to s pipeline if a precompiled asset is missed.
   config.assets.compile = false
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
