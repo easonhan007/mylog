@@ -1,7 +1,7 @@
 # config/redis.yml
 production:
-  host: todo
-  port: todo
+  host: localhost
+  port: 6379
   post_set_key: live_posts
   post_prefix: live_p
   tag_prefix: live_t_
