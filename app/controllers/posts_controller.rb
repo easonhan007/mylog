@@ -2,7 +2,7 @@ class PostsController < ApplicationController
   def index
     key = Rails.configuration.redis['post_set_key']
     tags_key = Rails.configuration.redis['tag_set_key']
-    @posts = @r.zrange(key, 0, 100, rev: true)
+    @posts = @r.zrange(key, 0, 100, rev: false)
     Rails.logger.info(@posts)
     @tags = @r.smembers(tags_key)
   end
